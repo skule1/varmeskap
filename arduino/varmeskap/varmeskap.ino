@@ -1,14 +1,21 @@
 /***************************************************************************
   Denne skissen leer tempraturen fra en BMP280, koblet til en Wemos mini32 D1 microkontroller
   I2C adresse BMP280 :0x76
+  0-deteksjon kobles til port INT0
+  thyristor-styringen skjer fra port 8
+
 
 ***************************************************************************/
 #define pinout  14  //GPIO14, D5
 int Temp;
 int val;
+int Satt_temp = 40;
+//int Max_temp = 60;
+int Max_strom=255;
 
 #define scr_trig   8
 #define pot       A0
+#define ZERODETECTPIN       0
 
 bool ZC = 0;
 uint16_t alpha;
@@ -35,8 +42,15 @@ Adafruit_BMP280 bmp; // I2C
 //Adafruit_BMP280 bmp(BMP_CS); // hardware SPI
 //Adafruit_BMP280 bmp(BMP_CS, BMP_MOSI, BMP_MISO,  BMP_SCK);
 
+void ZC_detect() {
+  ZC = 1;
+}
+
 void setup() {
   Serial.begin(115200);
+   Serial.println(__FILE__);
+  Serial.print("Kompilert: "); Serial.print(__TIMESTAMP__);
+Serial.println(" Versjon: 1.0.0");
   Serial.println(F("BMP280 test"));
 
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3D for 128x64
@@ -60,14 +74,14 @@ void setup() {
                   Adafruit_BMP280::STANDBY_MS_500); /* Standby time. */
   pinMode(pinout, OUTPUT);
   pinMode(scr_trig, OUTPUT);
+  pinMode(ZERODETECTPIN, INPUT);
   digitalWrite(scr_trig, LOW);
-  attachInterrupt(0, ZC_detect, FALLING);       // Enable external interrupt (INT0)
+  //  attachInterrupt(digitalPinToInterrupt(ZERODETECTPIN), ZC_detect, FALLING);       // Enable external interrupt (INT0)
+  attachInterrupt(ZERODETECTPIN, ZC_detect, FALLING);       // Enable external interrupt (INT0)
 
 }
 
 void loop() {
-
-
   if (ZC) {
     delayMicroseconds(alpha);
     digitalWrite(scr_trig, HIGH);
@@ -82,33 +96,25 @@ void loop() {
   Serial.print(F("Temperature = "));
   Serial.print(bmp.readTemperature());
   Serial.println(" *C");
-  
-    display.clearDisplay();
-    display.setTextSize(3);
-    display.setTextColor(WHITE);
-    display.setCursor(5, 0);
-    display.print("Temp: ");
-   display.setCursor(0, 30);
-    display.print(String(bmp.readTemperature())+"'C");
-    display.display();
+
+  display.clearDisplay();
+  display.setTextSize(3);
+  display.setTextColor(WHITE);
+  display.setCursor(5, 0);
+  display.print("Temp: ");
+  display.setCursor(0, 30);
+  display.print(String(bmp.readTemperature()) + "'C");
+  display.display();
 
   Serial.println();
   Temp = round( bmp.readTemperature());
-  if (Temp > 25.0)
-  {
-    alpha = map(Temp, 0, 50, 0, 255);
-    /*
-      #ifdef ESP32
-        ledcWrite(1, val);
-      #else
-        analogWrite(pinout, val);
-      #endif*/
-  }
-  Serial.println("Temp: " + String(Temp) + "\talpha: " + String(alpha));
+  if (Temp > Satt_temp)
+    alpha = 0;
+  else
+    alpha = map(Temp, Satt_temp - 30, Satt_temp, Max_strom, 0);
+
+  Serial.println("Temp: " + String(Temp) + "\talpha: " + String(alpha) + "\t" + String( constrain(alpha, 255, 0)));
+
   delay(2000);
 
-}
-
-void ZC_detect() {
-  ZC = 1;
 }
